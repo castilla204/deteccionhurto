@@ -24,3 +24,25 @@ class FlujoVideo:
 
         print("Fuente de vídeo abierta correctamente")
         return True
+
+    def fotogramas(self):
+        while True:
+            if self.captura is None:
+                if not self.conectar():
+                    time.sleep(self.retraso_reconexion_seg)
+                    continue
+
+            exito, fotograma = self.captura.read()
+
+            if not exito:
+                print("Error al leer fotograma")
+                self.captura.release()
+                self.captura = None
+
+                if self.bucle_video:
+                    time.sleep(0.5)
+                    continue
+                time.sleep(self.retraso_reconexion_seg)
+                continue
+
+            yield fotograma
