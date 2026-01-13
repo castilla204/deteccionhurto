@@ -81,3 +81,8 @@ class RastreadorPersonas:
 
         self._limpiar_rastreos_inactivos(ids_activos)
         return personas_rastreadas
+
+    def _limpiar_rastreos_inactivos(self, ids_activos):
+        ids_obsoletos = set(self.historial_rastreos.keys()) - ids_activos
+        for id_rastreo in ids_obsoletos:
+            del self.historial_rastreos[id_rastreo]
