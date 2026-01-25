@@ -43,4 +43,16 @@ class MotorComportamiento:
                 datos["inicio_estado"] = id_fotograma
                 datos["fotogramas_en_carro"] = 0
                 datos["riesgo"] += 0.2
+
+        # VERIFICACIÓN del carro de compra
+        elif estado == "VERIFICACION_CARRO":
+            if en_zona_carro:
+                datos["fotogramas_en_carro"] += 1
+                if datos["fotogramas_en_carro"] >= self.fotogramas_minimos_carro:
+                    datos["estado"] = "SEGURO"
+                    datos["riesgo"] = max(datos["riesgo"] - 0.4, 0.0)
+            elif id_fotograma - datos["inicio_estado"] > self.fotogramas_verificacion_carro:
+                datos["estado"] = "ALEJANDOSE"
+                datos["inicio_estado"] = id_fotograma
+                datos["riesgo"] += 0.3
         return datos["estado"], datos["riesgo"]
