@@ -55,4 +55,19 @@ class MotorComportamiento:
                 datos["estado"] = "ALEJANDOSE"
                 datos["inicio_estado"] = id_fotograma
                 datos["riesgo"] += 0.3
+
+        # ALEJÁNDOSE sin depositar en el carro
+        elif estado == "ALEJANDOSE":
+            datos["riesgo"] += 0.25
+            if datos["riesgo"] >= self.umbral_riesgo:
+                datos["estado"] = "RIESGO"
+
+        # SEGURO: interacción normal con el carro
+        elif estado == "SEGURO":
+            datos["riesgo"] *= 0.9
+
+        # RIESGO: posible hurto detectado
+        elif estado == "RIESGO":
+            pass
+
         return datos["estado"], datos["riesgo"]
