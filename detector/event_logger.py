@@ -23,5 +23,32 @@ class RegistradorEventos:
         os.makedirs(directorio_evento, exist_ok=True)
 
         ruta_clip = os.path.join(directorio_evento, "clip.mp4")
-        ruta_
+        ruta_metadatos = os.path.join(directorio_evento, "metadatos.json")
+
+        fotogramas = buffer_circular.obtener_fotogramas()
+        if not fotogramas:
+            return
+
+        alto, ancho, _ = fotogramas[0]["fotograma"].shape
+        escritor = cv2.VideoWriter(
+            ruta_clip,
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            self.fps,
+            (ancho, alto),
+        )
+
+        for elemento in fotogramas:
+            escritor.write(elemento["fotograma"])
+        escritor.release()
+
+        metadatos = {
+            "hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "id_camara": self.id_camara,
+            "id_persona": id_rastreo,
+            "puntuacion_riesgo": round(float(puntuacion_riesgo), 3),
+        }
+
+        with open(ruta_metadatos, "w", encoding="utf-8") as f:
+            json.dump(metadatos, f, indent=2, ensure_ascii=False)
+
         self.eventos_registrados.add(id_rastreo)
