@@ -20,9 +20,9 @@ ZONA_CARRO = {"x1": 520, "y1": 300, "x2": 800, "y2": 600}
 
 
 def principal():
-    from detector.behavior import MotorComportamiento
-    motor = MotorComportamiento()
-    print("Motor de comportamiento listo")
+    from detector.event_logger import RegistradorEventos
+    registrador = RegistradorEventos()
+    print("Registrador de eventos activo")
 
 
 if __name__ == "__main__":
