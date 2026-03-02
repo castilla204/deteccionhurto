@@ -50,5 +50,17 @@ def extraer_miniatura(ruta_video):
     fotograma = cv2.cvtColor(fotograma, cv2.COLOR_BGR2RGB)
     return Image.fromarray(fotograma)
 
+
+def agrupar_por_fecha(eventos):
+    agrupados = defaultdict(list)
+    for evento in eventos:
+        clave = evento["marca_tiempo"].strftime("%A, %d de %B de %Y")
+        agrupados[clave].append(evento)
+    return agrupados
+
+st.set_page_config(page_title="Detección de Hurto", layout="wide")
+st.title("Historial")
+
 eventos = cargar_eventos()
-st.write(f"Eventos encontrados: {len(eventos)}")
+for e in eventos:
+    st.video(e["video"])
