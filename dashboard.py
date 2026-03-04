@@ -58,9 +58,40 @@ def agrupar_por_fecha(eventos):
         agrupados[clave].append(evento)
     return agrupados
 
-st.set_page_config(page_title="Detección de Hurto", layout="wide")
-st.title("Historial")
+
+st.set_page_config(
+    page_title="Detección de Hurto — Historial de Incidentes",
+    layout="wide",
+)
+
+st.title("Historial de incidentes")
+st.caption("Sistema desarrollado por Diego Castilla")
 
 eventos = cargar_eventos()
-for e in eventos:
-    st.video(e["video"])
+eventos_por_fecha = agrupar_por_fecha(eventos)
+
+if not eventos:
+    st.info("Aún no se han detectado incidentes de hurto.")
+    st.stop()
+
+for fecha, eventos_dia in eventos_por_fecha.items():
+    st.subheader(fecha)
+    for evento in eventos_dia:
+        col_miniatura, col_detalle = st.columns([1, 5])
+        miniatura = extraer_miniatura(evento["video"])
+
+        with col_miniatura:
+            if miniatura:
+                st.image(miniatura, width=120)
+
+        with col_detalle:
+            meta = evento["metadatos"]
+            hora = evento["marca_tiempo"].strftime("%H:%M")
+            st.markdown("**Posible hurto detectado**")
+            st.caption(f"{hora} · Cámara {meta['id_camara']}")
+
+            with st.expander("Ver detalles"):
+                st.video(evento["video"])
+                st.json(meta)
+
+        st.divider()
