@@ -2,87 +2,86 @@ from ultralytics import YOLO
 from collections import deque
 
 
-class RastreadorPersonas:
-    """Detecta y rastrea personas con YOLOv8 y ByteTrack."""
+class PersonTracker:
+    # YOLO detecta y ByteTrack mantiene el mismo ID entre frames
 
     def __init__(
         self,
-        ruta_modelo="yolov8n.pt",
-        umbral_confianza=0.4,
-        config_rastreador="bytetrack.yaml",
-        historial_maximo=30,
+        model_path="yolov8n.pt",
+        confidence_threshold=0.4,
+        tracker_config="bytetrack.yaml",
+        max_history=30,
     ):
-        self.modelo = YOLO(ruta_modelo)
-        self.umbral_confianza = umbral_confianza
-        self.id_clase_persona = 0
-        self.config_rastreador = config_rastreador
-        self.historial_maximo = historial_maximo
-        self.historial_rastreos = {}
+        self.model = YOLO(model_path)
+        self.confidence_threshold = confidence_threshold
+        self.person_class_id = 0
+        self.tracker_config = tracker_config
+        self.max_history = max_history
+        self.track_history = {}
 
-    def _obtener_centro(self, caja):
-        x1, y1, x2, y2 = caja
+    def _get_center(self, bbox):
+        x1, y1, x2, y2 = bbox
         cx = int((x1 + x2) / 2)
         cy = int((y1 + y2) / 2)
         return cx, cy
 
-    def rastrear(self, fotograma, id_fotograma):
-        resultados = self.modelo.track(
-            fotograma,
+    def track(self, frame, frame_id):
+        results = self.model.track(
+            frame,
             persist=True,
-            tracker=self.config_rastreador,
+            tracker=self.tracker_config,
             verbose=False,
         )
 
-        personas_rastreadas = []
-        ids_activos = set()
+        tracked_persons = []
+        active_track_ids = set()
 
-        for resultado in resultados:
-            cajas = resultado.boxes
-            if cajas is None:
+        for result in results:
+            boxes = result.boxes
+            if boxes is None:
                 continue
 
-            for caja in cajas:
-                id_clase = int(caja.cls[0])
-                confianza = float(caja.conf[0])
+            for box in boxes:
+                cls_id = int(box.cls[0])
+                conf = float(box.conf[0])
 
-                if id_clase != self.id_clase_persona:
+                if cls_id != self.person_class_id:
                     continue
-                if confianza < self.umbral_confianza:
+                if conf < self.confidence_threshold:
                     continue
-                if caja.id is None:
+                if box.id is None:
                     continue
 
-                id_rastreo = int(caja.id[0])
-                ids_activos.add(id_rastreo)
+                track_id = int(box.id[0])
+                active_track_ids.add(track_id)
 
-                x1, y1, x2, y2 = map(int, caja.xyxy[0])
-                caja_bbox = [x1, y1, x2, y2]
-                centro = self._obtener_centro(caja_bbox)
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                bbox = [x1, y1, x2, y2]
+                center = self._get_center(bbox)
 
-                if id_rastreo not in self.historial_rastreos:
-                    self.historial_rastreos[id_rastreo] = deque(
-                        maxlen=self.historial_maximo
-                    )
+                if track_id not in self.track_history:
+                    self.track_history[track_id] = deque(maxlen=self.max_history)
 
-                self.historial_rastreos[id_rastreo].append({
-                    "id_fotograma": id_fotograma,
-                    "caja": caja_bbox,
-                    "centro": centro,
+                self.track_history[track_id].append({
+                    "frame_id": frame_id,
+                    "bbox": bbox,
+                    "center": center,
                 })
 
-                personas_rastreadas.append({
-                    "id_rastreo": id_rastreo,
-                    "caja": caja_bbox,
-                    "centro": centro,
-                    "confianza": confianza,
-                    "id_fotograma": id_fotograma,
-                    "historial": list(self.historial_rastreos[id_rastreo]),
+                tracked_persons.append({
+                    "track_id": track_id,
+                    "bbox": bbox,
+                    "center": center,
+                    "confidence": conf,
+                    "frame_id": frame_id,
+                    "history": list(self.track_history[track_id]),
                 })
 
-        self._limpiar_rastreos_inactivos(ids_activos)
-        return personas_rastreadas
+        self._cleanup_inactive_tracks(active_track_ids)
+        return tracked_persons
 
-    def _limpiar_rastreos_inactivos(self, ids_activos):
-        ids_obsoletos = set(self.historial_rastreos.keys()) - ids_activos
-        for id_rastreo in ids_obsoletos:
-            del self.historial_rastreos[id_rastreo]
+    def _cleanup_inactive_tracks(self, active_track_ids):
+        # Limpio IDs que ya no aparecen en pantalla
+        stale_ids = set(self.track_history.keys()) - active_track_ids
+        for track_id in stale_ids:
+            del self.track_history[track_id]

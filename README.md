@@ -1,57 +1,120 @@
 # deteccionhurto
 
-Sistema de visión por computador para detectar y registrar **posibles incidentes de hurto** en establecimientos comerciales.
+Proyecto del **Máster en Inteligencia Artificial** (TFM). Consiste en un sistema de vídeo que analiza el comportamiento de clientes en un pasillo de tienda y avisa cuando algo parece un posible hurto.
 
-Desarrollado por **Diego Castilla**.
+Lo fui desarrollando entre **diciembre 2025 y marzo 2026**, poco a poco, módulo a módulo.
 
----
-
-## Capacidades actuales
-
-- Ingesta de cámara en vivo o vídeo pregrabado
-- Detección y rastreo de personas en tiempo real
-- Modelado temporal del comportamiento con máquina de estados
-- Puntuación de riesgo según interacción con estante y carro
-- Guardado automático de clips con metadatos
-- Visualización de pose corporal para interpretabilidad
-- Panel mínimo para revisar incidentes
+**Diego Castilla**
 
 ---
 
-## Cómo funciona (flujo del sistema)
+## De qué va
 
-### 1. Ingesta del flujo de vídeo
-- Entrada: webcam (OpenCV VideoCapture) o archivo de vídeo
-- Implementado en `detector/stream.py`
+La cámara (o un vídeo de prueba) entra en un pipeline que hace lo siguiente:
 
-### 2. Muestreo de fotogramas
-- Las operaciones pesadas no se ejecutan en cada fotograma
-- Se procesa cada N fotogramas para mejorar rendimiento
-- Implementado en `detector/sampler.py`
+1. Detecta personas en cada frame procesado.
+2. Les asigna un ID y las sigue en el tiempo.
+3. Comprueba si entran en la zona del estante y si después pasan por la zona del carro.
+4. Si interactúan con el estante pero no van al carro, sube una puntuación de riesgo.
+5. Al llegar al umbral, guarda un clip corto con lo que había en memoria (unos 15 s antes) y un JSON con los datos del incidente.
 
-### 3. Detección y rastreo de personas
-- YOLOv8 para detección de personas
-- ByteTrack asigna IDs consistentes entre fotogramas
-- Implementado en `detector/tracker.py`
+No pretende acusar a nadie automáticamente: la idea es **filtrar y dejar evidencia** para que una persona lo revise. Por eso solo se guardan los casos marcados como riesgo, no el vídeo entero.
 
-### 4. Buffer circular (memoria pre-evento)
-- Mantiene los últimos 10–15 segundos de vídeo en memoria
-- Permite guardar contexto antes de detectar un evento
-- Implementado en `detector/ring_buffer.py`
+---
 
-### 5. Razonamiento de comportamiento (máquina de estados)
-Estados: INACTIVO, INTERACTUANDO_ESTANTE, VERIFICACION_CARRO, ALEJANDOSE, SEGURO, RIESGO.
+## Herramientas usadas
 
-Implementado en `detector/behavior.py`.
+| Herramienta | Para qué la usé |
+|-------------|-----------------|
+| **Python 3** | Todo el proyecto |
+| **OpenCV** | Leer webcam/vídeo, pintar cajas y guardar los clips |
+| **YOLOv8** (Ultralytics) | Detectar personas en el frame |
+| **ByteTrack** | Rastreo con ID estable entre frames |
+| **YOLOv8-pose** | Dibujar el esqueleto en pantalla (solo visual, no afecta al riesgo) |
+| **Streamlit** | Panel para ver el historial de incidentes |
+| **Pillow** | Miniaturas en el dashboard |
 
-### 6. Disparo de eventos y guardado de clips
-Cuando una persona entra en estado RIESGO se guarda el clip y metadatos.
-Implementado en `detector/event_logger.py`.
+Dependencias en `requirements.txt`: `opencv-python`, `ultralytics`, `streamlit`, `pillow`, `pyyaml`.
 
-### 7. Estimación de pose (visualización)
-Modelo yolov8n-pose para esqueletos corporales.
-Implementado en `detector/pose.py`.
+La primera ejecución descarga los modelos `yolov8n.pt` y `yolov8n-pose.pt`.
 
-### 8. Panel de revisión de incidentes
-Aplicación Streamlit que lee el directorio `eventos/`.
-Implementado en `dashboard.py`.
+---
+
+## Cómo está organizado el código
+
+```
+detector/
+  stream.py       → captura de vídeo (webcam o archivo)
+  sampler.py      → procesa 1 de cada 5 frames (si no, va muy lento)
+  tracker.py      → YOLO + ByteTrack
+  ring_buffer.py  → últimos 15 s en RAM
+  behavior.py     → máquina de estados y puntuación de riesgo
+  event_logger.py → guarda clip + metadata.json
+  pose.py         → estimación de pose para dibujar
+main.py           → une todo el pipeline
+dashboard.py      → revisar eventos guardados
+```
+
+Estados de la lógica de comportamiento:
+
+`IDLE` → `INTERACTING_WITH_SHELF` → `CART_CHECK` → `MOVING_AWAY` → `RISK`
+
+Si la persona pasa por el carro a tiempo, va a `SAFE` y el riesgo baja.
+
+---
+
+## Instalación
+
+```bash
+git clone https://github.com/castilla204/deteccionhurto.git
+cd deteccionhurto
+python -m venv env
+env\Scripts\activate
+pip install -r requirements.txt
+```
+
+---
+
+## Uso
+
+En `main.py` eliges la fuente:
+
+```python
+MODE = "live"               # webcam
+# MODE = "video"
+# VIDEO_PATH = "test_sample.mp4"
+```
+
+Las zonas del estante y el carro van con coordenadas en píxeles y hay que ajustarlas a mano según la cámara:
+
+```python
+SHELF_ZONE = {"x1": 100, "y1": 100, "x2": 500, "y2": 400}
+CART_ZONE  = {"x1": 520, "y1": 300, "x2": 800, "y2": 600}
+```
+
+```bash
+python main.py              # q para salir
+streamlit run dashboard.py
+```
+
+---
+
+## Qué se guarda
+
+Carpeta `events/event_YYYY_MM_DD_HH_MM_SS/`:
+
+- `clip.mp4`
+- `metadata.json` (hora, cámara, persona, risk_score)
+
+---
+
+## Limitaciones y mejoras posibles
+
+- Las zonas son fijas en código, habría que hacer un editor visual.
+- Una sola cámara de momento.
+- Los carros/cestas no se detectan como objetos; solo hay una zona rectangular.
+- Se podría añadir alertas por email o soporte multi-cámara.
+
+---
+
+Diego Castilla — Máster en Inteligencia Artificial — marzo 2026

@@ -2,47 +2,48 @@ import cv2
 import time
 
 
-class FlujoVideo:
-    """Captura fotogramas desde webcam o archivo de vídeo."""
+class VideoStream:
+    # Lee frames de webcam o de un vídeo en bucle
 
-    def __init__(self, fuente, retraso_reconexion_seg=2, bucle_video=True):
-        self.fuente = fuente
-        self.retraso_reconexion_seg = retraso_reconexion_seg
-        self.bucle_video = bucle_video
-        self.captura = None
+    def __init__(self, source, reconnect_delay_sec=2, loop_video=True):
+        self.source = source
+        self.reconnect_delay_sec = reconnect_delay_sec
+        self.loop_video = loop_video
+        self.cap = None
 
-    def conectar(self):
-        if self.captura is not None:
-            self.captura.release()
+    def connect(self):
+        if self.cap is not None:
+            self.cap.release()
 
-        self.captura = cv2.VideoCapture(self.fuente)
+        self.cap = cv2.VideoCapture(self.source)
 
-        if not self.captura.isOpened():
+        if not self.cap.isOpened():
             print("No se pudo abrir la fuente de vídeo")
-            self.captura = None
+            self.cap = None
             return False
 
-        print("Fuente de vídeo abierta correctamente")
+        print("Fuente de vídeo conectada")
         return True
 
-    def fotogramas(self):
+    def frames(self):
         while True:
-            if self.captura is None:
-                if not self.conectar():
-                    time.sleep(self.retraso_reconexion_seg)
+            if self.cap is None:
+                if not self.connect():
+                    time.sleep(self.reconnect_delay_sec)
                     continue
 
-            exito, fotograma = self.captura.read()
+            ret, frame = self.cap.read()
 
-            if not exito:
-                print("Error al leer fotograma")
-                self.captura.release()
-                self.captura = None
+            if not ret:
+                print("Fallo al leer frame, reintentando...")
+                self.cap.release()
+                self.cap = None
 
-                if self.bucle_video:
+                if self.loop_video:
                     time.sleep(0.5)
                     continue
-                time.sleep(self.retraso_reconexion_seg)
+
+                time.sleep(self.reconnect_delay_sec)
                 continue
 
-            yield fotograma
+            yield frame

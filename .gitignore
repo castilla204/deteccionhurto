@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 yolov8n.pt
 yolov8n-pose.pt
-test_sample.mp4
-test_sample_2.mp4
-events/
+muestra_prueba.mp4
+muestra_prueba_2.mp4
+eventos/
 .DS_Store

@@ -1,73 +1,69 @@
-class MotorComportamiento:
-    """Máquina de estados para evaluar riesgo de hurto."""
+class BehaviorEngine:
+    # Lógica principal: si toca el estante y no va al carro, sube el riesgo
 
     def __init__(self, fps=30):
         self.fps = fps
-        self.estados_personas = {}
+        self.person_states = {}
 
-        self.fotogramas_estante = int(2.0 * fps)
-        self.fotogramas_verificacion_carro = int(4.0 * fps)
-        self.fotogramas_minimos_carro = 3
-        self.umbral_riesgo = 0.75
+        self.shelf_dwell_frames = int(2.0 * fps)
+        self.cart_check_frames = int(4.0 * fps)
+        self.cart_overlap_min_frames = 3
+        self.risk_threshold = 0.75
 
-    def _inicializar_persona(self, id_rastreo, id_fotograma):
-        self.estados_personas[id_rastreo] = {
-            "estado": "INACTIVO",
-            "inicio_estado": id_fotograma,
-            "riesgo": 0.0,
-            "fotogramas_en_carro": 0,
+    def _init_person(self, track_id, frame_id):
+        self.person_states[track_id] = {
+            "state": "IDLE",
+            "state_start": frame_id,
+            "risk": 0.0,
+            "cart_overlap_frames": 0,
         }
 
-    def actualizar(self, id_rastreo, en_zona_estante, en_zona_carro, id_fotograma):
-        if id_rastreo not in self.estados_personas:
-            self._inicializar_persona(id_rastreo, id_fotograma)
+    def update(self, track_id, in_shelf_zone, in_cart_zone, frame_id):
+        if track_id not in self.person_states:
+            self._init_person(track_id, frame_id)
 
-        datos = self.estados_personas[id_rastreo]
-        estado = datos["estado"]
+        s = self.person_states[track_id]
+        state = s["state"]
 
-        # INACTIVO: esperando interacción con el estante
-        if estado == "INACTIVO":
-            if en_zona_estante:
-                datos["estado"] = "INTERACTUANDO_ESTANTE"
-                datos["inicio_estado"] = id_fotograma
+        if state == "IDLE":
+            if in_shelf_zone:
+                s["state"] = "INTERACTING_WITH_SHELF"
+                s["state_start"] = frame_id
 
-        # INTERACTUANDO con el estante
-        elif estado == "INTERACTUANDO_ESTANTE":
-            permanencia = id_fotograma - datos["inicio_estado"]
+        elif state == "INTERACTING_WITH_SHELF":
+            dwell = frame_id - s["state_start"]
 
-            if not en_zona_estante:
-                datos["estado"] = "INACTIVO"
-                datos["riesgo"] *= 0.5
-            elif permanencia >= self.fotogramas_estante:
-                datos["estado"] = "VERIFICACION_CARRO"
-                datos["inicio_estado"] = id_fotograma
-                datos["fotogramas_en_carro"] = 0
-                datos["riesgo"] += 0.2
+            if not in_shelf_zone:
+                s["state"] = "IDLE"
+                s["risk"] *= 0.5
+            elif dwell >= self.shelf_dwell_frames:
+                # Ya estuvo bastante en el estante, toca mirar el carro
+                s["state"] = "CART_CHECK"
+                s["state_start"] = frame_id
+                s["cart_overlap_frames"] = 0
+                s["risk"] += 0.2
 
-        # VERIFICACIÓN del carro de compra
-        elif estado == "VERIFICACION_CARRO":
-            if en_zona_carro:
-                datos["fotogramas_en_carro"] += 1
-                if datos["fotogramas_en_carro"] >= self.fotogramas_minimos_carro:
-                    datos["estado"] = "SEGURO"
-                    datos["riesgo"] = max(datos["riesgo"] - 0.4, 0.0)
-            elif id_fotograma - datos["inicio_estado"] > self.fotogramas_verificacion_carro:
-                datos["estado"] = "ALEJANDOSE"
-                datos["inicio_estado"] = id_fotograma
-                datos["riesgo"] += 0.3
+        elif state == "CART_CHECK":
+            if in_cart_zone:
+                s["cart_overlap_frames"] += 1
+                if s["cart_overlap_frames"] >= self.cart_overlap_min_frames:
+                    s["state"] = "SAFE"
+                    s["risk"] = max(s["risk"] - 0.4, 0.0)
+            elif frame_id - s["state_start"] > self.cart_check_frames:
+                # No pasó por el carro a tiempo
+                s["state"] = "MOVING_AWAY"
+                s["state_start"] = frame_id
+                s["risk"] += 0.3
 
-        # ALEJÁNDOSE sin depositar en el carro
-        elif estado == "ALEJANDOSE":
-            datos["riesgo"] += 0.25
-            if datos["riesgo"] >= self.umbral_riesgo:
-                datos["estado"] = "RIESGO"
+        elif state == "MOVING_AWAY":
+            s["risk"] += 0.25
+            if s["risk"] >= self.risk_threshold:
+                s["state"] = "RISK"
 
-        # SEGURO: interacción normal con el carro
-        elif estado == "SEGURO":
-            datos["riesgo"] *= 0.9
+        elif state == "SAFE":
+            s["risk"] *= 0.9
 
-        # RIESGO: posible hurto detectado
-        elif estado == "RIESGO":
+        elif state == "RISK":
             pass
 
-        return datos["estado"], datos["riesgo"]
+        return s["state"], s["risk"]

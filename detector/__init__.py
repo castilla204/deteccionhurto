@@ -1,1 +1,1 @@
-"""Paquete de detección de hurto en tiempo real — Diego Castilla."""
+# Módulos del pipeline de detección — Diego Castilla

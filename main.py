@@ -1,159 +1,150 @@
 import cv2
-from detector.stream import FlujoVideo
-from detector.sampler import MuestreadorFotogramas
-from detector.tracker import RastreadorPersonas
-from detector.ring_buffer import BufferCircular
-from detector.behavior import MotorComportamiento
-from detector.event_logger import RegistradorEventos
-from detector.pose import EstimadorPose
+from detector.stream import VideoStream
+from detector.sampler import FrameSampler
+from detector.tracker import PersonTracker
+from detector.ring_buffer import RingBuffer
+from detector.behavior import BehaviorEngine
+from detector.event_logger import EventLogger
+from detector.pose import PoseEstimator
 
 
-# ── Configuración general ──────────────────────────────────────────────────
-MODO = "video"  # "live" para webcam, "video" para archivo
-RUTA_VIDEO = "muestra_prueba.mp4"
+# Config — ajustar según la cámara que uses
+MODE = "video"          # "live" = webcam, "video" = archivo
+VIDEO_PATH = "test_sample.mp4"
 FPS = 30
-SEGUNDOS_BUFFER = 15
-PROCESAR_CADA_N_FOTOGRAMAS = 5
+BUFFER_SECONDS = 15
+PROCESS_EVERY_N_FRAMES = 5
 
-ZONA_ESTANTE = {"x1": 100, "y1": 100, "x2": 500, "y2": 400}
-ZONA_CARRO = {"x1": 520, "y1": 300, "x2": 800, "y2": 600}
+# Zonas del pasillo (coordenadas en píxeles, calibrar a mano)
+SHELF_ZONE = {"x1": 100, "y1": 100, "x2": 500, "y2": 400}
+CART_ZONE = {"x1": 520, "y1": 300, "x2": 800, "y2": 600}
 
-CONEXIONES_POSE = [
+POSE_CONNECTIONS = [
     (5, 7), (7, 9), (6, 8), (8, 10), (5, 6),
     (5, 11), (6, 12), (11, 12),
     (11, 13), (13, 15), (12, 14), (14, 16),
 ]
 
 
-def punto_en_zona(cx, cy, zona):
-    return zona["x1"] <= cx <= zona["x2"] and zona["y1"] <= cy <= zona["y2"]
+def point_in_zone(cx, cy, zone):
+    return zone["x1"] <= cx <= zone["x2"] and zone["y1"] <= cy <= zone["y2"]
 
 
-def dibujar_rastreos(fotograma, rastreos):
-    for rastreo in rastreos:
-        x1, y1, x2, y2 = rastreo["caja"]
-        estado = rastreo.get("estado", "SEGURO")
-        riesgo = rastreo.get("riesgo", 0.0)
+def draw_tracks(frame, tracks):
+    for track in tracks:
+        x1, y1, x2, y2 = track["bbox"]
+        state = track.get("state", "SAFE")
+        risk = track.get("risk", 0.0)
 
-        if estado == "RIESGO":
+        if state == "RISK":
             color = (0, 0, 255)
-            etiqueta = f"RIESGO {riesgo:.2f}"
-            escala_fuente = 1.3
-            grosor = 3
+            label = f"RIESGO {risk:.2f}"
+            font_scale = 1.3
+            thickness = 3
         else:
             color = (0, 255, 0)
-            etiqueta = "SEGURO"
-            escala_fuente = 0.9
-            grosor = 2
+            label = "SEGURO"
+            font_scale = 0.9
+            thickness = 2
 
-        cv2.rectangle(fotograma, (x1, y1), (x2, y2), color, grosor)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
         cv2.putText(
-            fotograma, etiqueta, (x1, y1 - 10),
-            cv2.FONT_HERSHEY_SIMPLEX, escala_fuente, color, grosor,
+            frame, label, (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness,
         )
 
 
-def imprimir_depuracion(rastreos):
-    print("
---- DEPURACIÓN DE RASTREOS ---")
-    for rastreo in rastreos:
-        print(f"Persona ID: {rastreo['id_rastreo']}")
-        print(f"  Centro actual: {rastreo['centro']}")
-        print(f"  Longitud historial: {len(rastreo['historial'])}")
-        for h in rastreo["historial"][-5:]:
-            print(f"    Fotograma {h['id_fotograma']} -> Centro {h['centro']}")
+def print_debug_tracks(tracks):
+    print("\n--- debug tracks ---")
+    for track in tracks:
+        print(f"Persona {track['track_id']} | centro {track['center']}")
+        for h in track["history"][-3:]:
+            print(f"  frame {h['frame_id']} -> {h['center']}")
 
 
-def dibujar_pose(fotograma, puntos_clave):
-    for idx, (x, y) in enumerate(puntos_clave):
+def draw_pose(frame, keypoints):
+    for idx, (x, y) in enumerate(keypoints):
         if idx in [0, 1, 2, 3, 4]:
             color = (255, 255, 0)
         elif idx in [5, 6, 7, 8, 9, 10]:
             color = (0, 255, 0)
         else:
             color = (0, 0, 255)
-        cv2.circle(fotograma, (int(x), int(y)), 4, color, -1)
+        cv2.circle(frame, (int(x), int(y)), 4, color, -1)
 
-    for i, j in CONEXIONES_POSE:
-        x1, y1 = puntos_clave[i]
-        x2, y2 = puntos_clave[j]
-        cv2.line(fotograma, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 255), 2)
+    for i, j in POSE_CONNECTIONS:
+        x1, y1 = keypoints[i]
+        x2, y2 = keypoints[j]
+        cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 255), 2)
 
 
-def principal():
-    if MODO == "video":
-        fuente = RUTA_VIDEO
-        bucle_video = True
+def main():
+    if MODE == "video":
+        source = VIDEO_PATH
+        loop_video = True
     else:
-        fuente = 0
-        bucle_video = False
+        source = 0
+        loop_video = False
 
-    flujo = FlujoVideo(fuente=fuente, bucle_video=bucle_video)
-    buffer = BufferCircular(segundos_maximos=SEGUNDOS_BUFFER, fps=FPS)
-    muestreador = MuestreadorFotogramas(
-        procesar_cada_n_fotogramas=PROCESAR_CADA_N_FOTOGRAMAS
-    )
-    rastreador = RastreadorPersonas(ruta_modelo="yolov8n.pt")
-    motor = MotorComportamiento(fps=FPS)
-    registrador = RegistradorEventos(
-        directorio_base="eventos", fps=FPS, id_camara="cam_01"
-    )
-    estimador_pose = EstimadorPose()
-    activar_pose = True
+    stream = VideoStream(source=source, loop_video=loop_video)
+    ring_buffer = RingBuffer(max_seconds=BUFFER_SECONDS, fps=FPS)
+    sampler = FrameSampler(process_every_n_frames=PROCESS_EVERY_N_FRAMES)
+    tracker = PersonTracker(model_path="yolov8n.pt")
+    behavior = BehaviorEngine(fps=FPS)
+    event_logger = EventLogger(base_dir="events", fps=FPS, camera_id="cam_01")
+    pose_estimator = PoseEstimator()
+    enable_pose = True
 
-    id_fotograma = 0
-    ultimos_rastreos = []
-    ultimas_poses = []
+    frame_id = 0
+    last_tracks = []
+    last_poses = []
 
-    for fotograma in flujo.fotogramas():
-        id_fotograma += 1
-        buffer.agregar(fotograma)
+    for frame in stream.frames():
+        frame_id += 1
+        ring_buffer.add(frame)
 
-        if id_fotograma % 100 == 0:
-            print(
-                f"Fotogramas en buffer: "
-                f"{len(buffer.obtener_fotogramas())} / {buffer.fotogramas_maximos}"
-            )
+        if frame_id % 100 == 0:
+            print(f"Buffer: {len(ring_buffer.get_frames())}/{ring_buffer.max_frames} frames")
 
-        if muestreador.debe_procesar():
-            ultimos_rastreos = rastreador.rastrear(fotograma, id_fotograma)
-            imprimir_depuracion(ultimos_rastreos)
+        if sampler.should_process():
+            last_tracks = tracker.track(frame, frame_id)
+            print_debug_tracks(last_tracks)
 
-            ultimas_poses = []
-            if activar_pose:
-                ultimas_poses = estimador_pose.estimar(fotograma)
+            last_poses = []
+            if enable_pose:
+                last_poses = pose_estimator.estimate(frame)
 
-            for rastreo in ultimos_rastreos:
-                x1, y1, x2, y2 = rastreo["caja"]
+            for track in last_tracks:
+                x1, y1, x2, y2 = track["bbox"]
                 cx = (x1 + x2) // 2
                 cy = (y1 + y2) // 2
 
-                en_estante = punto_en_zona(cx, cy, ZONA_ESTANTE)
-                en_carro = punto_en_zona(cx, cy, ZONA_CARRO)
+                in_shelf = point_in_zone(cx, cy, SHELF_ZONE)
+                in_cart = point_in_zone(cx, cy, CART_ZONE)
 
-                estado, riesgo = motor.actualizar(
-                    id_rastreo=rastreo["id_rastreo"],
-                    en_zona_estante=en_estante,
-                    en_zona_carro=en_carro,
-                    id_fotograma=id_fotograma,
+                state, risk = behavior.update(
+                    track_id=track["track_id"],
+                    in_shelf_zone=in_shelf,
+                    in_cart_zone=in_cart,
+                    frame_id=frame_id,
                 )
-                rastreo["estado"] = estado
-                rastreo["riesgo"] = riesgo
+                track["state"] = state
+                track["risk"] = risk
 
-                if estado == "RIESGO":
-                    registrador.registrar_evento(
-                        buffer_circular=buffer,
-                        id_rastreo=rastreo["id_rastreo"],
-                        puntuacion_riesgo=riesgo,
+                if state == "RISK":
+                    event_logger.log_event(
+                        ring_buffer=ring_buffer,
+                        track_id=track["track_id"],
+                        risk_score=risk,
                     )
 
-        dibujar_rastreos(fotograma, ultimos_rastreos)
+        draw_tracks(frame, last_tracks)
 
-        if activar_pose:
-            for pose in ultimas_poses:
-                dibujar_pose(fotograma, pose)
+        if enable_pose:
+            for pose in last_poses:
+                draw_pose(frame, pose)
 
-        cv2.imshow("Detección de Hurto — Diego Castilla", fotograma)
+        cv2.imshow("Deteccion Hurto - Diego Castilla", frame)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
@@ -162,4 +153,4 @@ def principal():
 
 
 if __name__ == "__main__":
-    principal()
+    main()

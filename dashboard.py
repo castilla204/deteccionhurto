@@ -7,91 +7,95 @@ from collections import defaultdict
 from PIL import Image
 
 
-DIRECTORIO_EVENTOS = "eventos"
+EVENTS_DIR = "events"
 
 
-def cargar_eventos():
-    eventos = []
-    if not os.path.exists(DIRECTORIO_EVENTOS):
-        return eventos
+def load_events():
+    events = []
+    if not os.path.exists(EVENTS_DIR):
+        return events
 
-    for nombre_evento in os.listdir(DIRECTORIO_EVENTOS):
-        ruta_evento = os.path.join(DIRECTORIO_EVENTOS, nombre_evento)
-        if not os.path.isdir(ruta_evento):
+    for event_name in os.listdir(EVENTS_DIR):
+        event_path = os.path.join(EVENTS_DIR, event_name)
+        if not os.path.isdir(event_path):
             continue
 
-        ruta_metadatos = os.path.join(ruta_evento, "metadatos.json")
-        ruta_video = os.path.join(ruta_evento, "clip.mp4")
+        metadata_path = os.path.join(event_path, "metadata.json")
+        video_path = os.path.join(event_path, "clip.mp4")
 
-        if not os.path.exists(ruta_metadatos) or not os.path.exists(ruta_video):
+        if not os.path.exists(metadata_path) or not os.path.exists(video_path):
             continue
 
-        with open(ruta_metadatos, "r", encoding="utf-8") as f:
-            metadatos = json.load(f)
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
 
-        marca = datetime.strptime(metadatos["hora"], "%Y-%m-%d %H:%M:%S")
-        eventos.append({
-            "directorio": ruta_evento,
-            "video": ruta_video,
-            "metadatos": metadatos,
-            "marca_tiempo": marca,
+        timestamp = datetime.strptime(metadata["time"], "%Y-%m-%d %H:%M:%S")
+        events.append({
+            "event_dir": event_path,
+            "video": video_path,
+            "metadata": metadata,
+            "timestamp": timestamp,
         })
 
-    eventos.sort(key=lambda e: e["marca_tiempo"], reverse=True)
-    return eventos
+    events.sort(key=lambda x: x["timestamp"], reverse=True)
+    return events
 
 
-def extraer_miniatura(ruta_video):
-    captura = cv2.VideoCapture(ruta_video)
-    exito, fotograma = captura.read()
-    captura.release()
-    if not exito:
+def extract_thumbnail(video_path):
+    cap = cv2.VideoCapture(video_path)
+    ret, frame = cap.read()
+    cap.release()
+
+    if not ret:
         return None
-    fotograma = cv2.cvtColor(fotograma, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(fotograma)
+
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(frame)
 
 
-def agrupar_por_fecha(eventos):
-    agrupados = defaultdict(list)
-    for evento in eventos:
-        clave = evento["marca_tiempo"].strftime("%A, %d de %B de %Y")
-        agrupados[clave].append(evento)
-    return agrupados
+def group_events_by_date(events):
+    grouped = defaultdict(list)
+    for event in events:
+        date_key = event["timestamp"].strftime("%d/%m/%Y")
+        grouped[date_key].append(event)
+    return grouped
 
 
 st.set_page_config(
-    page_title="Detección de Hurto — Historial de Incidentes",
+    page_title="Deteccion Hurto - Historial",
     layout="wide",
 )
 
 st.title("Historial de incidentes")
-st.caption("Sistema desarrollado por Diego Castilla")
+st.caption("Diego Castilla · deteccionhurto")
 
-eventos = cargar_eventos()
-eventos_por_fecha = agrupar_por_fecha(eventos)
+events = load_events()
+grouped_events = group_events_by_date(events)
 
-if not eventos:
-    st.info("Aún no se han detectado incidentes de hurto.")
+if not events:
+    st.info("Todavia no hay incidentes guardados.")
     st.stop()
 
-for fecha, eventos_dia in eventos_por_fecha.items():
-    st.subheader(fecha)
-    for evento in eventos_dia:
-        col_miniatura, col_detalle = st.columns([1, 5])
-        miniatura = extraer_miniatura(evento["video"])
+for date, day_events in grouped_events.items():
+    st.subheader(date)
 
-        with col_miniatura:
-            if miniatura:
-                st.image(miniatura, width=120)
+    for event in day_events:
+        col1, col2 = st.columns([1, 5])
+        thumbnail = extract_thumbnail(event["video"])
 
-        with col_detalle:
-            meta = evento["metadatos"]
-            hora = evento["marca_tiempo"].strftime("%H:%M")
-            st.markdown("**Posible hurto detectado**")
-            st.caption(f"{hora} · Cámara {meta['id_camara']}")
+        with col1:
+            if thumbnail:
+                st.image(thumbnail, width=120)
 
-            with st.expander("Ver detalles"):
-                st.video(evento["video"])
+        with col2:
+            meta = event["metadata"]
+            time_str = event["timestamp"].strftime("%H:%M")
+
+            st.markdown("**Posible hurto**")
+            st.caption(f"{time_str} · Camara {meta['camera_id']} · Riesgo {meta['risk_score']}")
+
+            with st.expander("Ver clip y metadatos"):
+                st.video(event["video"])
                 st.json(meta)
 
         st.divider()

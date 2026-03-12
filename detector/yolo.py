@@ -1,36 +1,36 @@
 from ultralytics import YOLO
 
 
-class DetectorPersonas:
-    """Detecta personas en un fotograma usando YOLOv8."""
+class PersonDetector:
+    # Detección básica de personas, sin tracking todavía
 
-    def __init__(self, ruta_modelo="yolov8n.pt", umbral_confianza=0.4):
-        self.modelo = YOLO(ruta_modelo)
-        self.umbral_confianza = umbral_confianza
-        self.id_clase_persona = 0
+    def __init__(self, model_path="yolov8n.pt", confidence_threshold=0.4):
+        self.model = YOLO(model_path)
+        self.confidence_threshold = confidence_threshold
+        self.person_class_id = 0
 
-    def detectar(self, fotograma):
-        resultados = self.modelo(fotograma, verbose=False)
-        detecciones = []
+    def detect(self, frame):
+        results = self.model(frame, verbose=False)
+        detections = []
 
-        for resultado in resultados:
-            cajas = resultado.boxes
-            if cajas is None:
+        for result in results:
+            boxes = result.boxes
+            if boxes is None:
                 continue
 
-            for caja in cajas:
-                id_clase = int(caja.cls[0])
-                confianza = float(caja.conf[0])
+            for box in boxes:
+                cls_id = int(box.cls[0])
+                conf = float(box.conf[0])
 
-                if id_clase != self.id_clase_persona:
+                if cls_id != self.person_class_id:
                     continue
-                if confianza < self.umbral_confianza:
+                if conf < self.confidence_threshold:
                     continue
 
-                x1, y1, x2, y2 = map(int, caja.xyxy[0])
-                detecciones.append({
-                    "caja": [x1, y1, x2, y2],
-                    "confianza": confianza,
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                detections.append({
+                    "bbox": [x1, y1, x2, y2],
+                    "confidence": conf,
                 })
 
-        return detecciones
+        return detections

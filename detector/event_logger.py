@@ -4,51 +4,51 @@ import cv2
 from datetime import datetime
 
 
-class RegistradorEventos:
-    """Guarda clips de vídeo y metadatos cuando se detecta riesgo."""
+class EventLogger:
+    # Solo guardo un clip por persona por sesión para no llenar el disco
 
-    def __init__(self, directorio_base="eventos", fps=30, id_camara="cam_01"):
-        self.directorio_base = directorio_base
+    def __init__(self, base_dir="events", fps=30, camera_id="cam_01"):
+        self.base_dir = base_dir
         self.fps = fps
-        self.id_camara = id_camara
-        self.eventos_registrados = set()
-        os.makedirs(self.directorio_base, exist_ok=True)
+        self.camera_id = camera_id
+        self.logged_events = set()
+        os.makedirs(self.base_dir, exist_ok=True)
 
-    def registrar_evento(self, buffer_circular, id_rastreo, puntuacion_riesgo):
-        if id_rastreo in self.eventos_registrados:
+    def log_event(self, ring_buffer, track_id, risk_score):
+        if track_id in self.logged_events:
             return
 
-        marca = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-        directorio_evento = os.path.join(self.directorio_base, f"evento_{marca}")
-        os.makedirs(directorio_evento, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        event_dir = os.path.join(self.base_dir, f"event_{timestamp}")
+        os.makedirs(event_dir, exist_ok=True)
 
-        ruta_clip = os.path.join(directorio_evento, "clip.mp4")
-        ruta_metadatos = os.path.join(directorio_evento, "metadatos.json")
+        clip_path = os.path.join(event_dir, "clip.mp4")
+        metadata_path = os.path.join(event_dir, "metadata.json")
 
-        fotogramas = buffer_circular.obtener_fotogramas()
-        if not fotogramas:
+        frames = ring_buffer.get_frames()
+        if not frames:
             return
 
-        alto, ancho, _ = fotogramas[0]["fotograma"].shape
-        escritor = cv2.VideoWriter(
-            ruta_clip,
+        height, width, _ = frames[0]["frame"].shape
+        writer = cv2.VideoWriter(
+            clip_path,
             cv2.VideoWriter_fourcc(*"mp4v"),
             self.fps,
-            (ancho, alto),
+            (width, height),
         )
 
-        for elemento in fotogramas:
-            escritor.write(elemento["fotograma"])
-        escritor.release()
+        for item in frames:
+            writer.write(item["frame"])
+        writer.release()
 
-        metadatos = {
-            "hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "id_camara": self.id_camara,
-            "id_persona": id_rastreo,
-            "puntuacion_riesgo": round(float(puntuacion_riesgo), 3),
+        metadata = {
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "camera_id": self.camera_id,
+            "person_id": track_id,
+            "risk_score": round(float(risk_score), 3),
         }
 
-        with open(ruta_metadatos, "w", encoding="utf-8") as f:
-            json.dump(metadatos, f, indent=2, ensure_ascii=False)
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2)
 
-        self.eventos_registrados.add(id_rastreo)
+        self.logged_events.add(track_id)

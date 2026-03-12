@@ -1,22 +1,23 @@
 from ultralytics import YOLO
 
 
-class EstimadorPose:
-    """Estima poses corporales para visualización e interpretabilidad."""
+class PoseEstimator:
+    # Solo para visualizar, no entra en la lógica de riesgo
 
-    def __init__(self, ruta_modelo="yolov8n-pose.pt", confianza=0.3):
-        self.modelo = YOLO(ruta_modelo)
-        self.confianza = confianza
+    def __init__(self, model_path="yolov8n-pose.pt", conf=0.3):
+        self.model = YOLO(model_path)
+        self.conf = conf
 
-    def estimar(self, fotograma):
-        resultados = self.modelo(fotograma, conf=self.confianza, verbose=False)
+    def estimate(self, frame):
+        results = self.model(frame, conf=self.conf, verbose=False)
         poses = []
 
-        for resultado in resultados:
-            if resultado.keypoints is None:
+        for r in results:
+            if r.keypoints is None:
                 continue
-            puntos = resultado.keypoints.xy.cpu().numpy()
-            for puntos_persona in puntos:
-                poses.append(puntos_persona)
+
+            kpts = r.keypoints.xy.cpu().numpy()
+            for person_kpts in kpts:
+                poses.append(person_kpts)
 
         return poses
