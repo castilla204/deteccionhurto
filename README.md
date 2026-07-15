@@ -1,6 +1,6 @@
 # deteccionhurto
 
-Proyecto del **Máster en Inteligencia Artificial** (TFM). Consiste en un sistema de vídeo que analiza el comportamiento de clientes en un pasillo de tienda y avisa cuando algo parece un posible hurto.
+Proyecto personal desarrollado en paralelo a mi Curso de Especialización en Inteligencia Artificial y Big Data. Consiste en un sistema de vídeo que analiza el comportamiento de clientes en un pasillo de tienda y avisa cuando algo parece un posible hurto.
 
 Lo fui desarrollando entre **diciembre 2025 y marzo 2026**, poco a poco, módulo a módulo.
 
@@ -117,4 +117,4 @@ Carpeta `events/event_YYYY_MM_DD_HH_MM_SS/`:
 
 ---
 
-Diego Castilla — Máster en Inteligencia Artificial — marzo 2026
+Diego Castilla — marzo 2026
