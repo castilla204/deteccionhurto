@@ -118,3 +118,5 @@ Carpeta `events/event_YYYY_MM_DD_HH_MM_SS/`:
 ---
 
 Diego Castilla — marzo 2026
+
+<!-- meta:sync 1785961132 -->
